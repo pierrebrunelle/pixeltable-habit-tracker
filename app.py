@@ -3,11 +3,38 @@
     pxt schema update app.py habits
     pxt service run app.py habits
 """
+import pixeltable as pxt
+import pixeltable.functions as pxtf
 from pixeltable.serving import FastAPIRouter
 
-from models import Habits, TableModel  # noqa: F401  (TableModel lets `pxt schema` find the models)
-from queries import by_category
+from udfs import habit_blurb, streak_label
 
+# ---- tables ----
+TableModel = pxt.model_base()
+
+
+class Habits(TableModel, name='habits'):
+    id = pxt.Column(value=pxtf.uuid.uuid7(), primary_key=True)
+    name: pxt.String
+    category: pxt.String
+    streak_days: pxt.Int | None
+    notes: pxt.String | None
+
+    label = streak_label(streak_days)
+    name_upper = pxtf.string.upper(name)
+    name_blurb = habit_blurb(name, category)
+
+
+# ---- queries ----
+@pxt.query
+def by_category(category: str):
+    """Habits in a category, longest streak first."""
+    return Habits.where(Habits.category == category).select(
+        Habits.id, Habits.name, Habits.streak_days, Habits.label
+    ).order_by(Habits.streak_days, asc=False)
+
+
+# ---- routes ----
 habits_api = FastAPIRouter(name='habits_api')
 habits_api.add_insert_route(
     Habits, path='/habits',
